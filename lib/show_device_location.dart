@@ -89,38 +89,6 @@ class _ShowDeviceLocationState extends State<ShowDeviceLocation> with WidgetsBin
           child: Builder(
             builder: (_) {
               switch(_locationPermission) {
-                case AppPermissionStatus.denied:
-                  return Center(
-                    child: ElevatedButton(
-                      onPressed: checkLocationPermissions,
-                      child: const Text('Enable location'),
-                    ),
-                  );
-                case AppPermissionStatus.permanentlyDenied:
-                  return Center(
-                    child: Column(
-                      crossAxisAlignment: CrossAxisAlignment.center,
-                      mainAxisAlignment: MainAxisAlignment.center,
-                      children: [
-                        const Text(
-                          'App location permission is denied. Go to settings and enable the location to use the app ',
-                          textAlign: TextAlign.center,
-                        ),
-                        const SizedBox(
-                          height: 15,
-                        ),
-                        ElevatedButton(
-                          onPressed: () async {
-                            final appSettingOpened = await openAppSettings();
-                            setState(() {
-                              _appSettingOpened = appSettingOpened;
-                            });
-                          },
-                          child: const Text('Open App settings'),
-                        ),
-                      ],
-                    ),
-                  );
                 case AppPermissionStatus.granted:
                   return Stack(
                     children: [
@@ -156,6 +124,38 @@ class _ShowDeviceLocationState extends State<ShowDeviceLocation> with WidgetsBin
                         ),
                       ),
                     ],
+                  );
+                case AppPermissionStatus.denied:
+                  return Center(
+                    child: ElevatedButton(
+                      onPressed: checkLocationPermissions,
+                      child: const Text('Enable location'),
+                    ),
+                  );
+                case AppPermissionStatus.permanentlyDenied:
+                  return Center(
+                    child: Column(
+                      crossAxisAlignment: CrossAxisAlignment.center,
+                      mainAxisAlignment: MainAxisAlignment.center,
+                      children: [
+                        const Text(
+                          'App location permission is denied. Go to settings and enable the location to use the app ',
+                          textAlign: TextAlign.center,
+                        ),
+                        const SizedBox(
+                          height: 15,
+                        ),
+                        ElevatedButton(
+                          onPressed: () async {
+                            final appSettingOpened = await openAppSettings();
+                            setState(() {
+                              _appSettingOpened = appSettingOpened;
+                            });
+                          },
+                          child: const Text('Open App settings'),
+                        ),
+                      ],
+                    ),
                   );
               }
             },
