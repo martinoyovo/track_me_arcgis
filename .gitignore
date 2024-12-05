@@ -9,6 +9,7 @@
 .history
 .svn/
 migrate_working_dir/
+arcgis_maps_core/
 
 # IntelliJ related
 *.iml
