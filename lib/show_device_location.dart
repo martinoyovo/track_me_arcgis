@@ -1,21 +1,4 @@
-//
-// Copyright 2024 Esri
-//
-// Licensed under the Apache License, Version 2.0 (the "License");
-// you may not use this file except in compliance with the License.
-// You may obtain a copy of the License at
-//
-//   https://www.apache.org/licenses/LICENSE-2.0
-//
-// Unless required by applicable law or agreed to in writing, software
-// distributed under the License is distributed on an "AS IS" BASIS,
-// WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
-// See the License for the specific language governing permissions and
-// limitations under the License.
-//
-
 import 'dart:async';
-
 import 'package:arcgis_maps/arcgis_maps.dart';
 import 'package:flutter/material.dart';
 import 'package:permission_handler/permission_handler.dart';
@@ -24,31 +7,37 @@ class ShowDeviceLocation extends StatefulWidget {
   const ShowDeviceLocation({super.key});
 
   @override
-  State<ShowDeviceLocation> createState() => _ShowDeviceLocationState();
+  State<ShowDeviceLocation> createState() =>
+      _ShowDeviceLocationState();
 }
 
-class _ShowDeviceLocationState extends State<ShowDeviceLocation> with WidgetsBindingObserver {
+class _ShowDeviceLocationState extends State<ShowDeviceLocation> with WidgetsBindingObserver{
   // Create a controller for the map view.
   final _mapViewController = ArcGISMapView.createController();
   // Create the system location data source.
   final _locationDataSource = SystemLocationDataSource();
   // A flag for when the map view is ready and controls can be used.
   var _ready = false;
-  var _appSettingOpened = false;
+  //Track the app’s location permission state.
   var _locationPermission = AppPermissionStatus.denied;
-  AppLifecycleState? _appLifecycleState;
+
+  // A boolean to track if the app settings were opened.
+  var _appSettingOpened = false;
 
   @override
   void initState() {
     WidgetsBinding.instance.addObserver(this);
-
-    initLocationPermissions();
+    if (_locationPermission != AppPermissionStatus.granted) {
+      initLocationPermissions();
+    }
     super.initState();
   }
 
   @override
   void dispose() {
+    // Remove the app lifecycle observer.
     WidgetsBinding.instance.removeObserver(this);
+    // Stop location updates when the widget is disposed.
     _locationDataSource.stop();
     super.dispose();
   }
@@ -56,95 +45,61 @@ class _ShowDeviceLocationState extends State<ShowDeviceLocation> with WidgetsBin
   @override
   void didChangeAppLifecycleState(AppLifecycleState state) {
     super.didChangeAppLifecycleState(state);
-    setState(() {
-      _appLifecycleState = state;
-      if(_appSettingOpened) {
-        if(_appLifecycleState == AppLifecycleState.resumed) {
-          initLocationPermissions();
-        }
-      }
-    });
+    if (state == AppLifecycleState.resumed && _appSettingOpened) {
+      // Recheck location permissions only if settings were opened.
+      initLocationPermissions();
+    }
   }
 
   @override
   Widget build(BuildContext context) {
     return Scaffold(
       body: SafeArea(
-          top: false,
-          child: Builder(
-            builder: (_) {
-              switch(_locationPermission) {
-                case AppPermissionStatus.granted:
-                  return Stack(
-                    children: [
-                      Expanded(
-                        // Add a map view to the widget tree and set a controller.
-                        child: ArcGISMapView(
-                          controllerProvider: () => _mapViewController,
-                          onMapViewReady: onMapViewReady,
-                        ),
-                      ),
-                      // Display a progress indicator and prevent interaction until state is ready.
-                      Visibility(
-                        visible: !_ready,
-                        child: SizedBox.expand(
-                          child: Container(
-                            color: Colors.white30,
-                            child:
-                            const Center(child: CircularProgressIndicator()),
-                          ),
-                        ),
-                      ),
-                    ],
-                  );
-                case AppPermissionStatus.denied:
-                  return Center(
-                    child: ElevatedButton(
-                      onPressed: checkLocationPermissions,
-                      child: const Text('Enable location'),
-                    ),
-                  );
-                case AppPermissionStatus.permanentlyDenied:
-                  return Center(
-                    child: Column(
-                      crossAxisAlignment: CrossAxisAlignment.center,
-                      mainAxisAlignment: MainAxisAlignment.center,
-                      children: [
-                        const Text(
-                          'App location permission is denied. Go to settings and enable the location to use the app ',
-                          textAlign: TextAlign.center,
-                        ),
-                        const SizedBox(
-                          height: 15,
-                        ),
-                        ElevatedButton(
-                          onPressed: () async {
-                            final appSettingOpened = await openAppSettings();
-                            setState(() {
-                              _appSettingOpened = appSettingOpened;
-                            });
-                          },
-                          child: const Text('Open App settings'),
-                        ),
-                      ],
-                    ),
-                  );
-              }
-            },
-          )
+        top: false,
+        child: Builder(
+          builder: (_) {
+            switch(_locationPermission) {
+              case AppPermissionStatus.granted:
+                return _buildMapView(); // Widget to show map view
+              case AppPermissionStatus.denied:
+                return _buildRequestLocationButton(); // Widget to request location
+              case AppPermissionStatus.permanentlyDenied:
+                return _buildSettingsWidget(); // Widget to open app settings
+            }
+          },
+        ),
       ),
     );
   }
 
-  void onMapViewReady() async {
+  Future<void> initLocationPermissions() async {
+    final status = await Permission.location.status;
+    switch (status) {
+      case PermissionStatus.granted:
+        setState(() => _locationPermission = AppPermissionStatus.granted);
+        break;
+      case PermissionStatus.permanentlyDenied:
+        setState(() =>
+        _locationPermission = AppPermissionStatus.permanentlyDenied);
+        break;
+      case PermissionStatus.denied:
+      default:
+        setState(() => _locationPermission = AppPermissionStatus.denied);
+        break;
+    }
+  }
+
+  void _onMapViewReady() async {
     // Create a map with the Navigation Night basemap style.
     _mapViewController.arcGISMap =
         ArcGISMap.withBasemapStyle(BasemapStyle.arcGISNavigationNight);
 
-    // Set the initial system location data source and auto-pan mode.
+    // Set the initial system location data source.
     _mapViewController.locationDisplay.dataSource = _locationDataSource;
-    _mapViewController.locationDisplay.autoPanMode =
-        LocationDisplayAutoPanMode.recenter;
+
+    // Set the initial system location auto-pan mode.
+    _mapViewController.locationDisplay.autoPanMode = LocationDisplayAutoPanMode.recenter;
+
     // Attempt to start the location data source (this will prompt the user for permission).
     try {
       await _locationDataSource.start();
@@ -161,41 +116,69 @@ class _ShowDeviceLocationState extends State<ShowDeviceLocation> with WidgetsBin
     setState(() => _ready = true);
   }
 
-  Future<void> checkLocationPermissions() async {
+  Widget _buildMapView() => Stack(
+    children: [
+      ArcGISMapView(
+        controllerProvider: () => _mapViewController,
+        onMapViewReady: _onMapViewReady,
+      ),
+      // Display a progress indicator until the map is ready.
+      Visibility(
+        visible: !_ready,
+        child: SizedBox.expand(
+          child: Container(
+            color: Colors.white30,
+            child: const Center(
+              child: CircularProgressIndicator(),
+            ),
+          ),
+        ),
+      ),
+    ],
+  );
+
+  Widget _buildRequestLocationButton() => Center(
+    child: ElevatedButton(
+      onPressed: requestLocationPermissions, // Requests permission
+      child: const Text('Enable Location'),
+    ),
+  );
+  Future<void> requestLocationPermissions() async {
     final requestPermission = await Permission.location.request();
     if (requestPermission.isGranted) {
-      setState(() {
-        _locationPermission = AppPermissionStatus.granted;
-      });
-    } else if(requestPermission.isPermanentlyDenied) {
-      setState(() {
-        _locationPermission = AppPermissionStatus.permanentlyDenied;
-      });
+      setState(() => _locationPermission = AppPermissionStatus.granted);
+    } else if (requestPermission.isPermanentlyDenied) {
+      setState(() => _locationPermission = AppPermissionStatus.permanentlyDenied);
     } else {
-      setState(() {
-        _locationPermission = AppPermissionStatus.denied;
-      });
+      setState(() => _locationPermission = AppPermissionStatus.denied);
     }
   }
 
-  Future<void> initLocationPermissions() async {
-    final status = await Permission.location.status;
-    switch(status) {
-      case PermissionStatus.granted:
-        setState(() {
-          _locationPermission = AppPermissionStatus.granted;
-        });
-      case PermissionStatus.permanentlyDenied:
-        setState(() {
-          _locationPermission = AppPermissionStatus.permanentlyDenied;
-        });
-      case PermissionStatus.denied:
-      default:
-        setState(() {
-          _locationPermission = AppPermissionStatus.denied;
-        });
-    }
-  }
+  Widget _buildSettingsWidget() => Center(
+    child: Column(
+      crossAxisAlignment: CrossAxisAlignment.center,
+      mainAxisAlignment: MainAxisAlignment.center,
+      children: [
+        const Text(
+          'App location permission is denied. Go to settings and enable location to use the app.',
+          textAlign: TextAlign.center,
+        ),
+        const SizedBox(height: 15),
+        ElevatedButton(
+          onPressed: () async {
+            // Open settings and track if settings were opened successfully
+            final appSettingOpened = await openAppSettings();
+            setState(() => _appSettingOpened = appSettingOpened);
+          },
+          child: const Text('Open App Settings'),
+        ),
+      ],
+    ),
+  );
 }
 
-enum AppPermissionStatus { granted, denied, permanentlyDenied }
+enum AppPermissionStatus {
+  granted,
+  denied,
+  permanentlyDenied,
+}
